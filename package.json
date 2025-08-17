@@ -1,0 +1,30 @@
+{
+  "name": "pc-manual-finder",
+  "version": "1.0.0",
+  "description": "A web app to find PC component manuals and installation guides",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon ./index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "pc",
+    "components",
+    "guides",
+    "tutorials",
+    "youtube",
+    "reddit"
+  ],
+  "author": "",
+  "license": "MIT"
+}
