@@ -161,12 +161,12 @@ function createResultCard(result) {
   `;
 }
 
-// Get emoji icon for content type
+// Get icon for content type
 function getTypeIcon(type) {
   switch (type) {
-    case "video": return "🎥";
-    case "forum": return "💬";
-    default: return "📄";
+    case "video": return "Video";
+    case "forum": return "Forum";
+    default: return "Document";
   }
 }
 
@@ -232,7 +232,7 @@ function showError(message) {
   errorDiv.className = "error-message";
   errorDiv.innerHTML = `
     <div class="error-content">
-      <span class="error-icon">⚠️</span>
+      <span class="error-icon">!</span>
       <span class="error-text">${message}</span>
       <button class="error-close" onclick="hideError()">×</button>
     </div>
