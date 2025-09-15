@@ -142,40 +142,39 @@ async function getYouTubeVideoDetails(videoIds) {
 }
 
 async function searchReddit(query) {
-  const REDDIT_USER_AGENT = process.env.REDDIT_USER_AGENT || 'PCManualFinder/1.0';
-  
   try {
-    const subreddits = [
-      "buildapc",
-      "pcmasterrace", 
-      "techsupport",
-      "hardware",
-      "AMD",
-      "intel",
-      "nvidia"
-    ];
-
+    // Use a simpler Reddit search approach
+    const subreddits = ["buildapc", "pcmasterrace", "techsupport"];
     let allResults = [];
 
     for (let subreddit of subreddits) {
-      const searchUrl = `https://www.reddit.com/r/${subreddit}/search.json?q=${encodeURIComponent(query)}&restrict_sr=on&sort=relevance&t=year&limit=5`;
-      
       try {
-        const response = await axios.get(searchUrl, {
+        // Use the hot.json endpoint instead of search.json for better reliability
+        const response = await axios.get(`https://www.reddit.com/r/${subreddit}/hot.json?limit=10`, {
           headers: {
-            'User-Agent': REDDIT_USER_AGENT
-          }
+            'User-Agent': 'PCManualFinder/1.0 (by /u/yourusername)',
+            'Accept': 'application/json'
+          },
+          timeout: 5000
         });
 
         if (response.status === 200 && response.data.data && response.data.data.children) {
-          const posts = response.data.data.children.map(post => ({
+          // Filter posts that contain keywords from our query
+          const queryWords = query.toLowerCase().split(' ');
+          const relevantPosts = response.data.data.children.filter(post => {
+            const title = post.data.title.toLowerCase();
+            const selftext = (post.data.selftext || '').toLowerCase();
+            return queryWords.some(word => title.includes(word) || selftext.includes(word));
+          });
+
+          const posts = relevantPosts.slice(0, 3).map(post => ({
             id: post.data.id,
             title: post.data.title,
-            description: post.data.selftext.substring(0, 200) + "...",
+            description: (post.data.selftext || '').substring(0, 200) + "...",
             url: "https://reddit.com" + post.data.permalink,
             type: "forum",
             source: "Reddit",
-            thumbnail: post.data.thumbnail !== "self" ? post.data.thumbnail : null,
+            thumbnail: post.data.thumbnail !== "self" && post.data.thumbnail !== "default" ? post.data.thumbnail : null,
             score: post.data.score,
             comments: post.data.num_comments,
             subreddit: post.data.subreddit,
@@ -186,12 +185,44 @@ async function searchReddit(query) {
         }
       } catch (error) {
         console.error(`Reddit API error for ${subreddit}:`, error.message);
+        // Continue with other subreddits even if one fails
+      }
+    }
+
+    // If no relevant posts found, return some general posts
+    if (allResults.length === 0) {
+      try {
+        const response = await axios.get('https://www.reddit.com/r/buildapc/hot.json?limit=5', {
+          headers: {
+            'User-Agent': 'PCManualFinder/1.0 (by /u/yourusername)',
+            'Accept': 'application/json'
+          },
+          timeout: 5000
+        });
+
+        if (response.status === 200 && response.data.data && response.data.data.children) {
+          allResults = response.data.data.children.slice(0, 3).map(post => ({
+            id: post.data.id,
+            title: post.data.title,
+            description: (post.data.selftext || '').substring(0, 200) + "...",
+            url: "https://reddit.com" + post.data.permalink,
+            type: "forum",
+            source: "Reddit",
+            thumbnail: post.data.thumbnail !== "self" && post.data.thumbnail !== "default" ? post.data.thumbnail : null,
+            score: post.data.score,
+            comments: post.data.num_comments,
+            subreddit: post.data.subreddit,
+            created: new Date(post.data.created_utc * 1000).toLocaleDateString()
+          }));
+        }
+      } catch (error) {
+        console.error("Fallback Reddit API error:", error.message);
       }
     }
 
     allResults.sort((a, b) => (b.score + b.comments) - (a.score + a.comments));
     
-    return allResults.slice(0, 10);
+    return allResults.slice(0, 8);
 
   } catch (error) {
     console.error("Reddit API error:", error);
