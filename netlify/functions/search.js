@@ -1,46 +1,45 @@
-const express = require("express");
-const cors = require("cors");
-const path = require("path");
-const dotenv = require("dotenv");
-const serverless = require("serverless-http");
 const axios = require("axios");
 
-const __dirname = path.dirname(__filename);
+exports.handler = async (event, context) => {
+  // Enable CORS
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  };
 
-dotenv.config();
+  // Handle preflight requests
+  if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 200,
+      headers,
+      body: "",
+    };
+  }
 
-const app = express();
-const port = process.env.PORT || "3000";
-
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
-
-app.use(cors({
-  origin: "*"
-}));
-
-// Serve static files from the public directory
-app.use(express.static(path.join(__dirname, "../../public")));
-
-app.get("/api/search", async (request, response) => {
   try {
-    let componentType = request.query.componentType;
-    let brand = request.query.brand;
-    let model = request.query.model;
+    const { componentType, brand, model } = event.queryStringParameters || {};
 
     if (!componentType || !brand) {
-      return response.status(400).json({
-        error: "Component type and brand are required"
-      });
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          error: "Component type and brand are required"
+        }),
+      };
     }
 
     let searchQuery = model 
-      ? brand + " " + model + " " + componentType + " installation guide manual"
-      : brand + " " + componentType + " installation guide manual";
+      ? `${brand} ${model} ${componentType} installation guide manual`
+      : `${brand} ${componentType} installation guide manual`;
 
-    console.log("Searching for: " + searchQuery);
+    console.log("Searching for:", searchQuery);
 
+    // Search YouTube
     let youtubeResults = await searchYouTube(searchQuery);
+    
+    // Search Reddit
     let redditResults = await searchReddit(searchQuery);
 
     let results = {
@@ -50,25 +49,33 @@ app.get("/api/search", async (request, response) => {
       timestamp: new Date().toISOString()
     };
 
-    response.json(results);
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify(results),
+    };
 
   } catch (error) {
     console.error("Search error:", error);
-    response.status(500).json({
-      error: "Failed to search for manuals"
-    });
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        error: "Failed to search for manuals"
+      }),
+    };
   }
-});
+};
 
 async function searchYouTube(query) {
-  let YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+  const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
   
   if (!YOUTUBE_API_KEY) {
     return [];
   }
 
   try {
-    let searchParams = {
+    const searchParams = {
       part: "snippet",
       q: query,
       type: "video",
@@ -79,15 +86,15 @@ async function searchYouTube(query) {
       key: YOUTUBE_API_KEY
     };
 
-    let response = await axios.get("https://www.googleapis.com/youtube/v3/search?" + new URLSearchParams(searchParams));
-    let data = response.data;
+    const response = await axios.get("https://www.googleapis.com/youtube/v3/search?" + new URLSearchParams(searchParams));
+    const data = response.data;
     
     if (!data.items) {
       return [];
     }
 
-    let videoIds = data.items.map(item => item.id.videoId);
-    let videoDetails = await getYouTubeVideoDetails(videoIds);
+    const videoIds = data.items.map(item => item.id.videoId);
+    const videoDetails = await getYouTubeVideoDetails(videoIds);
 
     return data.items.map((item, index) => ({
       id: item.id.videoId,
@@ -113,15 +120,15 @@ async function getYouTubeVideoDetails(videoIds) {
   if (!videoIds.length) return [];
 
   try {
-    let YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
-    let params = {
+    const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+    const params = {
       part: "contentDetails,statistics",
       id: videoIds.join(","),
       key: YOUTUBE_API_KEY
     };
 
-    let response = await axios.get("https://www.googleapis.com/youtube/v3/videos?" + new URLSearchParams(params));
-    let data = response.data;
+    const response = await axios.get("https://www.googleapis.com/youtube/v3/videos?" + new URLSearchParams(params));
+    const data = response.data;
 
     return data.items.map(item => ({
       duration: formatDuration(item.contentDetails.duration),
@@ -135,15 +142,10 @@ async function getYouTubeVideoDetails(videoIds) {
 }
 
 async function searchReddit(query) {
-  let REDDIT_CLIENT_ID = process.env.REDDIT_CLIENT_ID;
-  let REDDIT_USER_AGENT = process.env.REDDIT_USER_AGENT;
+  const REDDIT_USER_AGENT = process.env.REDDIT_USER_AGENT || 'PCManualFinder/1.0';
   
-  if (!REDDIT_CLIENT_ID) {
-    return [];
-  }
-
   try {
-    let subreddits = [
+    const subreddits = [
       "buildapc",
       "pcmasterrace", 
       "techsupport",
@@ -156,19 +158,17 @@ async function searchReddit(query) {
     let allResults = [];
 
     for (let subreddit of subreddits) {
-      let searchUrl = "https://www.reddit.com/r/" + subreddit + "/search.json?q=" + encodeURIComponent(query) + "&restrict_sr=on&sort=relevance&t=year&limit=5";
+      const searchUrl = `https://www.reddit.com/r/${subreddit}/search.json?q=${encodeURIComponent(query)}&restrict_sr=on&sort=relevance&t=year&limit=5`;
       
-      let response = await axios.get(searchUrl, {
-        headers: {
-          'User-Agent': REDDIT_USER_AGENT || 'PCManualFinder/1.0'
-        }
-      });
+      try {
+        const response = await axios.get(searchUrl, {
+          headers: {
+            'User-Agent': REDDIT_USER_AGENT
+          }
+        });
 
-      if (response.status === 200) {
-        let data = response.data;
-        
-        if (data.data && data.data.children) {
-          let posts = data.data.children.map(post => ({
+        if (response.status === 200 && response.data.data && response.data.data.children) {
+          const posts = response.data.data.children.map(post => ({
             id: post.data.id,
             title: post.data.title,
             description: post.data.selftext.substring(0, 200) + "...",
@@ -184,6 +184,8 @@ async function searchReddit(query) {
           
           allResults = allResults.concat(posts);
         }
+      } catch (error) {
+        console.error(`Reddit API error for ${subreddit}:`, error.message);
       }
     }
 
@@ -198,10 +200,10 @@ async function searchReddit(query) {
 }
 
 function formatDuration(duration) {
-  let match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
-  let hours = (match[1] || "").replace("H", "");
-  let minutes = (match[2] || "").replace("M", "");
-  let seconds = (match[3] || "").replace("S", "");
+  const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
+  const hours = (match[1] || "").replace("H", "");
+  const minutes = (match[2] || "").replace("M", "");
+  const seconds = (match[3] || "").replace("S", "");
   
   let result = "";
   if (hours) result += hours + ":";
@@ -215,11 +217,3 @@ function formatNumber(num) {
   if (!num) return "Unknown";
   return parseInt(num).toLocaleString();
 }
-
-// Serve the main page
-app.get("/", (request, response) => {
-  response.sendFile(path.join(__dirname, "../../public", "index.html"));
-});
-
-// Export the serverless handler
-module.exports.handler = serverless(app);
