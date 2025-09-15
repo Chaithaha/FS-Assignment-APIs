@@ -4,6 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import serverless from "serverless-http";
+import axios from "axios";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -80,8 +81,8 @@ async function searchYouTube(query) {
       key: YOUTUBE_API_KEY
     };
 
-    let response = await fetch("https://www.googleapis.com/youtube/v3/search?" + new URLSearchParams(searchParams));
-    let data = await response.json();
+    let response = await axios.get("https://www.googleapis.com/youtube/v3/search?" + new URLSearchParams(searchParams));
+    let data = response.data;
     
     if (!data.items) {
       return [];
@@ -121,8 +122,8 @@ async function getYouTubeVideoDetails(videoIds) {
       key: YOUTUBE_API_KEY
     };
 
-    let response = await fetch("https://www.googleapis.com/youtube/v3/videos?" + new URLSearchParams(params));
-    let data = await response.json();
+    let response = await axios.get("https://www.googleapis.com/youtube/v3/videos?" + new URLSearchParams(params));
+    let data = response.data;
 
     return data.items.map(item => ({
       duration: formatDuration(item.contentDetails.duration),
@@ -159,14 +160,14 @@ async function searchReddit(query) {
     for (let subreddit of subreddits) {
       let searchUrl = "https://www.reddit.com/r/" + subreddit + "/search.json?q=" + encodeURIComponent(query) + "&restrict_sr=on&sort=relevance&t=year&limit=5";
       
-      let response = await fetch(searchUrl, {
+      let response = await axios.get(searchUrl, {
         headers: {
           'User-Agent': REDDIT_USER_AGENT || 'PCManualFinder/1.0'
         }
       });
 
-      if (response.ok) {
-        let data = await response.json();
+      if (response.status === 200) {
+        let data = response.data;
         
         if (data.data && data.data.children) {
           let posts = data.data.children.map(post => ({
